@@ -1,48 +1,57 @@
-//Server.js
 const express = require('express');
 const bodyParser = require('body-parser');
-const app = express();
-const Mailgun = require('mailgun.js');
 const formData = require('form-data');
+const Mailgun = require('mailgun.js');
+require('dotenv').config();
 
+const app = express();
+
+// Body parser middleware
 app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.json());
+
+// Serve static files
 app.use(express.static('public'));
 
-app.get('/', function(req, res) {
-    res.sendFile(__dirname + '/index.html');
+// Mailgun setup
+const mailgun = new Mailgun(formData);
+const mg = mailgun.client({
+    username: 'api',
+    key: process.env.MAILGUN_API_KEY || 'e9dd9daa8f4a593614eb25558f8ab929-79295dd0-c72fc8af' 
 });
 
-app.post('/signup', function(req, res) {
-    const firstname = req.body.firstname;
-    const email = req.body.email;
+app.get('/', function(request, response) {
+    response.sendFile(__dirname + '/index.html'); 
+});
 
-    sendWelcomeEmail(firstname, email, function(error, body) {
-        if (error) {
-            console.error("Error sending email:", error);
-            res.send("There was an error signing up. Please try again.");
-        } else {
-            console.log("Email sent successfully:", body);
-            res.send(`Welcome, ${firstname}! Your email is ${email}`);
-        }
+// Route to handle form submission
+app.post('/', (req, res) => {
+    const { Email } = req.body;
+
+    if (!Email) {
+        return res.status(400).json({ error: 'Email is required' });
+    }
+
+    // Send welcome email using Mailgun
+    mg.messages.create(process.env.MAILGUN_DOMAIN || 'sandbox8085a717f439400f83ae97812dc1a57e.mailgun.org', {
+        from: `bullet <mailgun@${process.env.MAILGUN_DOMAIN || 'sandbox8085a717f439400f83ae97812dc1a57e.mailgun.org'}>`,
+        to: [Email],
+        subject: 'Welcome to our Daily Insider!',
+        text: 'Thank you for subscribing to our Daily Insider newsletter. Stay tuned for more updates!',
+        html: '<h1>Thank you for subscribing to our Daily Insider newsletter. Stay tuned for more updates!</h1>'
+    })
+    .then(msg => {
+        console.log(msg); // logs response data
+        res.status(200).json({ message: 'Subscription successful, email sent!' });
+    })
+    .catch(err => {
+        console.error(err); // logs any error
+        res.status(500).json({ error: 'Failed to send email' });
     });
 });
 
-function sendWelcomeEmail(firstname, email, callback) {
-    const mailgun = new Mailgun(formData);
-    const mg = mailgun.client({username: 'api', key: '12e8a03c4435bf8b87819b2793eeeb8a-79295dd0-b49d55f4'});
-
-    const data = {
-        from: 'gursharanpreet4779.be23@chitkara.edu.in',
-        to: email,
-        subject: 'Welcome to Deakin Newsletter',
-        text: `Hi ${firstname} ,\n\nThank you for signing up for the Deakin Newsletter! We're excited to have you with us.\n\nBest regards,\nDeakin Team`,
-    };
-
-    mg.messages.create('sandbox0658f58e39e74e988c9b31ba29732a4b.mailgun.org', data)
-        .then(body => callback(null, body))
-        .catch(error => callback(error, null));
-}
-
-app.listen(8080, function() {
-    console.log("The server is listening on port 8080");
+// Start the server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
 });
